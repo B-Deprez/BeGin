@@ -11,6 +11,8 @@ from .common import BaseScenarioLoader
 from .datasets import *
 from . import evaluator_map
 
+from .elliptic import EllipticDataset
+
 def load_node_dataset(dataset_name, dataset_load_func, incr_type, save_path):
     """
         The function for load node-level datasets.
@@ -21,6 +23,10 @@ def load_node_dataset(dataset_name, dataset_load_func, incr_type, save_path):
         graph = custom_dataset['graph']
         num_feats = custom_dataset['num_feats']
         num_classes = custom_dataset['num_classes']
+    elif dataset_name in ['elliptic'] and incr_type in ['time']: # Code for elliptic dataset. We assume this is always time-IL.
+        dataset = EllipticDataset()
+        graph = dataset[0]
+        num_feats, num_classes = graph.ndata['feat'].shape[-1], 2
     elif dataset_name in ['cora'] and incr_type in ['task', 'class']:
         dataset = dgl.data.CoraGraphDataset(raw_dir=save_path, verbose=False)
         graph = dataset._g
