@@ -11,6 +11,12 @@ import shutil
 import tqdm
 from ogb.graphproppred.mol_encoder import AtomEncoder, BondEncoder
 
+import sys
+
+DIR = os.path.dirname(os.path.abspath(__file__)) 
+os.chdir(DIR+"/../")
+sys.path.append(DIR+"/../")
+
 task_level = {'NC': 'nodes', 'LC': 'links', 'LP': 'links', 'GC': 'graphs'}
 model_suffix = {'NC': 'Node', 'LC': 'Link', 'LP': 'Link', 'GC': 'Graph'}
 model_settings = {'NC': (3, 256), 'LC': (3, 256), 'LP': (3, 256), 'GC': (4, 146)}
@@ -38,7 +44,8 @@ exp_settings = {('cora', 'task'): (3, 'accuracy', 1000, 20, 0.001),
                 ('aromaticity', 'task'): (10, 'accuracy', 100, 10, 0.01),
                 ('aromaticity', 'class'): (10, 'accuracy', 100, 10, 0.01),
                 ('ogbg-molhiv', 'domain'): (20, 'rocauc', 100, 10, 0.01),
-                ('nyctaxi', 'time'): (12, 'accuracy', 100, 10, 0.01)}
+                ('nyctaxi', 'time'): (12, 'accuracy', 100, 10, 0.01), 
+                ('elliptic', 'time'): (49, 'rocauc', 20, 10, 0.01)} # Elliptic is time incremental, has 49 tasks, and uses rocauc as a metric
 num_memories = {'cora': 12,
                 'citeseer': 12,
                 'ogbn-arxiv': 2000,
@@ -53,7 +60,8 @@ num_memories = {'cora': 12,
                 'wikics': 4000,
                 'bitcoin': 500,
                 'corafull': 210,
-                'ogbn-mag': 8000}
+                'ogbn-mag': 8000,
+                'elliptic': 100}
 
 special_kwargs = {'Bare': {},
                   'LwF': {'lamb': None, 'T': 2.},
@@ -81,11 +89,11 @@ special_params = {'Bare': ('none', [None]),
                        
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description='Graph CL Benchmark Example')
-    parser.add_argument("--dataset-name", type=str, default="cora",
-                        help="dataset name (cora, citeseer, ogbn-arxiv, corafull, ogbn-mag, ogbn-products, ogbn-proteins, bitcoin, ogbl-collab, wikics, mnist, cifar10, aromaticity, nyctaxi, ogbg-molhiv)")
+    parser.add_argument("--dataset-name", type=str, default="elliptic",
+                        help="dataset name (cora, citeseer, ogbn-arxiv, corafull, ogbn-mag, ogbn-products, ogbn-proteins, bitcoin, ogbl-collab, wikics, mnist, cifar10, aromaticity, nyctaxi, ogbg-molhiv, elliptic)")
     parser.add_argument("--algo", type=str, default="Bare",
                         help="algorithm name (Bare, LwF, EWC, MAS, GEM, TWP, ERGNN, CGNN, PackNet, Piggyback, HAT)") 
-    parser.add_argument("--incr", type=str, default="class",
+    parser.add_argument("--incr", type=str, default="time", # Elliptic is time incremental
                         help="incremental setting (task, class, domain, or time)")
     parser.add_argument("--gpu", type=int, default=0,
                         help="gpu_id")
@@ -116,10 +124,10 @@ if __name__ == '__main__':
     n_layers, n_hidden = model_settings[args.task_type]
     special_param_name, special_param_range = special_params[args.algo]
     
-    lrs = [1e-3, 5e-3, 1e-2]
-    drs = [0.0, 0.25, 0.5]
-    wds = [0.0, 5e-4]
-    seeds = [0, 1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000, 9000]
+    lrs = [1e-3, 1e-2] # learning rate
+    drs = [0.0, 0.25] # dropout
+    wds = [0.0, 5e-4] # weight decay
+    seeds = [0, 1000, 2000] # random seed
     
     try:
         log_path = f'benchmark_{args.task_type}_{args.dataset_name}_{args.algo}_{args.incr}' 
@@ -187,7 +195,7 @@ if __name__ == '__main__':
                                                  scenario = scenario,
                                                  optimizer_fn = lambda x: torch.optim.Adam(x, lr=lr, weight_decay=wd),
                                                  loss_fn = torch.nn.CrossEntropyLoss(ignore_index=-1) if metric == 'accuracy' else (lambda preds, gt: torch.nn.BCEWithLogitsLoss()(preds, gt.float())),
-                                                 device = torch.device(f'cuda:{args.gpu}'),
+                                                 device = torch.device('cpu'),
                                                  scheduler_fn = lambda x: torch.optim.lr_scheduler.ReduceLROnPlateau(x, mode='max' if args.dataset_name in ['wikics', 'ogbl-collab'] else 'min', patience=patience, min_lr= lr * min_scale * 2., verbose=False),
                                                  benchmark = True, seed = seed, verbose=False, **algo_kwargs)
 

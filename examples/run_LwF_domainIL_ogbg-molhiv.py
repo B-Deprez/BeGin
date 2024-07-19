@@ -1,4 +1,12 @@
 import torch
+
+import os
+import sys
+
+DIR = os.path.dirname(os.path.abspath(__file__)) 
+os.chdir(DIR+"/../")
+sys.path.append(DIR+"/../")
+
 from begin.algorithms.lwf.graphs import *
 from begin.scenarios.graphs import GCScenarioLoader
 from begin.utils import GCNGraph
