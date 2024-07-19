@@ -9,7 +9,7 @@ class BaseScenarioLoader:
         save_path (str): The path where the dataset file is saved.
         num_tasks (int): The number of tasks in graph continual learning.
         incr_type (str): The incremental setting of graph continual learning (spec. task, class, domain, and time).
-        metric (str): Basic metric to measure performance (spec., accuracy, AUCROC, and HITS@K).
+        metric (str): Basic metric to measure performance (spec., accuracy, rocauc, prauc, and HITS@K).
         kwargs: (dict, optional): Keyword arguments to be passed to the scenario module (e.g., task_shuffle (bool): If true, fixed order, else random order)
     
     """

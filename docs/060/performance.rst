@@ -38,6 +38,18 @@ ROCAUC
 
 --------------------
 
+PRAUC
+----------------
+
+.. autoclass:: begin.evaluators.PRAUCEvaluator
+    :undoc-members:
+    :members:
+    :private-members:
+
+
+
+--------------------
+
 
 HITS@K
 ----------------
