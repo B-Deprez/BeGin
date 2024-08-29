@@ -31,12 +31,13 @@ class NCTrainer(BaseTrainer):
         curr_training_states['best_val_loss'] = 1e10
         self._reset_optimizer(curr_optimizer)
         
-        if self.binary:
+        #if self.binary:
             # it uses all outputs for every task
-            curr_model.observe_labels(torch.arange(curr_dataset.ndata['label'].shape[-1]))
-        else:
+        #    curr_model.observe_labels(torch.arange(curr_dataset.ndata['label'].shape[-1]))
+        #else:
             # it enables to predict the new classes from the current task
-            curr_model.observe_labels(curr_dataset.ndata['label'][curr_dataset.ndata['train_mask'] | curr_dataset.ndata['val_mask']])    
+            #curr_model.observe_labels(curr_dataset.ndata['label'][curr_dataset.ndata['train_mask'] | curr_dataset.ndata['val_mask']])  
+        curr_model.observe_labels(curr_dataset.ndata['label'][curr_dataset.ndata['train_mask'] | curr_dataset.ndata['val_mask']])    
     
     def predictionFormat(self, results):
         if self.binary:
@@ -49,8 +50,11 @@ class NCTrainer(BaseTrainer):
     
     def inference(self, model, _curr_batch, training_states):
         curr_batch, mask = _curr_batch
-        preds = model(curr_batch.to(self.device), curr_batch.ndata['feat'].to(self.device))[mask]
-        loss = self.loss_fn(preds, curr_batch.ndata['label'][mask].to(self.device))
+        preds = model(curr_batch.to(self.device), 
+                      curr_batch.ndata['feat'].to(self.device)
+                      )[mask][:,1]
+        labs = curr_batch.ndata['label'][mask].to(self.device)
+        loss = self.loss_fn(preds, labs)
         return {'preds': preds, 'loss': loss}
     
     def afterInference(self, results, model, optimizer, _curr_batch, training_states):
