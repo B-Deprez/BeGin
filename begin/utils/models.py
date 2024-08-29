@@ -23,6 +23,7 @@ class AdaptiveLinear(nn.Module):
         self.bias = bias
         self.accum = accum
         self.num_outputs = out_channels
+        self.in_features = in_channels
         self.output_masks = None
         self.observed = torch.zeros(out_channels, dtype=torch.bool)
         
@@ -52,7 +53,7 @@ class AdaptiveLinear(nn.Module):
         if new_num_outputs > self.num_outputs:
             prev_weight, prev_bias = self.lin.weight.data[prv_observed], (self.lin.bias.data[prv_observed] if self.bias else None)
             self.observed = torch.cat((self.observed.to(device), torch.zeros(new_num_outputs - self.num_outputs, dtype=torch.bool).to(device)), dim=-1)
-            self.lin = nn.Linear(in_features, new_num_outputs, bias=self.bias)
+            self.lin = nn.Linear(self.in_features, new_num_outputs, bias=self.bias)
             self.lin.weight.data[self.observed] = prev_weight
             if self.bias: self.lin.bias.data[self.observed] = prev_bias    
             self.num_outputs = new_num_outputs
