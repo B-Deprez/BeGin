@@ -34,7 +34,7 @@ class EllipticDataset(DGLDataset):
             label_data["class"].to_numpy()
             )
         
-        node_data[1] = node_data[1]//7
+        node_data[1] = (node_data[1]-1)//7 # Goes from 1 to 49. So we want from 0 to 6. 
 
         time_stamp = torch.from_numpy(
             node_data[1].to_numpy()
