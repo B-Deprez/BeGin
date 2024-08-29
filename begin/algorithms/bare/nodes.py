@@ -17,8 +17,13 @@ class NCTaskILBareTrainer(NCTrainer):
         """
         curr_batch, mask = _curr_batch
         # use task_masks as additional input
-        preds = model(curr_batch.to(self.device), curr_batch.ndata['feat'].to(self.device), task_masks=curr_batch.ndata['task_specific_mask'].to(self.device))[mask]
-        loss = self.loss_fn(preds, curr_batch.ndata['label'][mask].to(self.device))
+        preds = model(
+            curr_batch.to(self.device), 
+            curr_batch.ndata['feat'].to(self.device), 
+            task_masks=curr_batch.ndata['task_specific_mask'].to(self.device)
+            )[mask]
+        labs = curr_batch.ndata['label'][mask].to(self.device)
+        loss = self.loss_fn(preds, labs)
         return {'preds': preds, 'loss': loss}
     
 class NCClassILBareTrainer(NCTrainer):
