@@ -96,7 +96,7 @@ class PRAUCEvaluator(BaseEvaluator):
         return retval
     
     def simple_eval(self, prediction, answer):
-        return average_precision_score(answer.cpu().numpy(), prediction.cpu().numpy())
+        return average_precision_score(answer.cpu().numpy(), prediction.cpu().detach().numpy())
 
 class HitsEvaluator(BaseEvaluator):
     r"""
