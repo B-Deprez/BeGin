@@ -24,11 +24,11 @@ def load_node_dataset(dataset_name, dataset_load_func, incr_type, save_path):
         graph = custom_dataset['graph']
         num_feats = custom_dataset['num_feats']
         num_classes = custom_dataset['num_classes']
-    elif dataset_name in ['elliptic'] and incr_type in ['time']: # Code for elliptic dataset. We assume this is always time-IL.
+    elif dataset_name in ['elliptic', 'Elliptic'] and incr_type in ['time']: # Code for elliptic dataset. We assume this is always time-IL.
         dataset = EllipticDataset()
         graph = dataset[0]
         num_feats, num_classes = graph.ndata['feat'].shape[-1], 2
-    elif dataset_name in ['IBM'] and incr_type in ['task', 'class']: # Code for IBM dataset. We assume this is always task-IL.
+    elif dataset_name in ['IBM', 'ibm'] and incr_type in ['task', 'class']: # Code for IBM dataset. We assume this is always task-IL.
         dataset = IBMDataset()
         graph = dataset[0]
         num_feats, num_classes = graph.ndata['feat'].shape[-1], dataset.num_classes

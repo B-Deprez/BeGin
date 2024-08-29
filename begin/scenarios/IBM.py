@@ -9,11 +9,13 @@ from dgl.data import DGLDataset
 
 import pandas as pd
 
+from .utils.igraph_implementation import network_features
+
 class IBMDataset(DGLDataset):
     def __init__(self, dataset_name= "HI-Small"):
+        self.dataset_name = dataset_name
         super().__init__(name="IBM")
         self.num_classes = 8
-        self.dataset_name = dataset_name
 
     def create_identifiers(self, df):
         """
@@ -116,8 +118,8 @@ class IBMDataset(DGLDataset):
         return df_patterns
 
     def define_ML_labels(self):
-        path_trans="data/"+self.dataset_name+"_Trans.csv" 
-        path_patterns="data/"+self.dataset_name+"_Patterns.txt"
+        path_trans="data/IBM/"+self.dataset_name+"_Trans.csv" 
+        path_patterns="data/IBM/"+self.dataset_name+"_Patterns.txt"
 
         dtype_dict = {
                 "From Bank": str,
@@ -127,6 +129,20 @@ class IBMDataset(DGLDataset):
             }
 
         transactions_df = pd.read_csv(path_trans, dtype=dtype_dict)
+
+        nodes_to_delete = [
+            "81211BC00",
+            "8135B8250",
+            "80FA55EF0",
+            "80A7FD400",
+            "81211BA20",
+            "8135B8200",
+            "80FA56340",
+            "80A7FDE00"
+            ] # These accounts pose some problems, where the account is linked to two different banks
+        
+        transactions_df = transactions_df[~transactions_df["Account"].isin(nodes_to_delete)]
+        transactions_df = transactions_df[~transactions_df["Account.1"].isin(nodes_to_delete)]
 
         columns_money = ['Amount Received', 'Amount Paid']
         for col in columns_money: # make sure monetary amounts have two decimals
@@ -158,7 +174,7 @@ class IBMDataset(DGLDataset):
 
         return transactions_df_extended, pattern_columns
     
-    def summarise_ML_labels(transactions_df_extended, pattern_columns):
+    def summarise_ML_labels(self,transactions_df_extended, pattern_columns):
         laundering_from = transactions_df_extended[["Account", "Is Laundering"]+pattern_columns].groupby("Account").mean()
         laundering_to = transactions_df_extended[["Account.1", "Is Laundering"]+pattern_columns].groupby("Account.1").mean()
         
@@ -176,7 +192,7 @@ class IBMDataset(DGLDataset):
             i+=1
         laundering_combined["class"] = laundering_combined[pattern_columns].sum(axis=1)
   
-        laundering_combined["class"] = laundering_combined["Label"].apply(lambda x: x-1)
+        laundering_combined["class"] = laundering_combined["class"].apply(lambda x: x-1)
 
         laundering_combined.reset_index(inplace=True)
         laundering_combined=laundering_combined[["Account", "class"]]
@@ -184,14 +200,15 @@ class IBMDataset(DGLDataset):
         
         return laundering_combined
     
-
-    
     def create_node_data(self, transactions_df_extended):
         from_data = transactions_df_extended[["Account", "From Bank"]].drop_duplicates()
         from_data.columns = ["txId", "Bank"]
         to_data = transactions_df_extended[["Account.1", "To Bank"]].drop_duplicates()
         to_data.columns = ["txId", "Bank"]
         node_data = pd.concat([from_data, to_data], axis=0).drop_duplicates()
+
+        # Convert bank names to integers
+        node_data['Bank'], _ = pd.factorize(node_data['Bank'])
 
         return node_data
 
@@ -210,12 +227,18 @@ class IBMDataset(DGLDataset):
         edge_data.txId1 = edge_data.txId1.map(map_id)
         edge_data.txId2 = edge_data.txId2.map(map_id)
 
-        node_features = torch.from_numpy(node_data.drop(columns=["txId"]).to_numpy())
-        node_labels = torch.from_numpy(label_data["class"].to_numpy())
-
         edge_scr = torch.from_numpy(edge_data["txId1"].to_numpy())
         edge_dst = torch.from_numpy(edge_data["txId2"].to_numpy())
         edge_scr, edge_dst = torch.cat([edge_scr, edge_dst]), torch.cat([edge_dst, edge_scr]) # Make it bidirectional
+
+        list_network_features = network_features(len(node_data), edge_scr)
+        node_data["degree"] = list_network_features[0]
+        node_data["betweenness"] = list_network_features[1]
+        node_data["closeness"] = list_network_features[2]
+        node_data["pagerank"] = list_network_features[3]
+
+        node_features = torch.from_numpy(node_data.drop(columns=["txId"]).to_numpy())
+        node_labels = torch.from_numpy(label_data["class"].to_numpy())
 
         self.graph = dgl.graph(
             (edge_scr, edge_dst), 
