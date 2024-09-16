@@ -9,7 +9,7 @@ from dgl.data import DGLDataset
 
 import pandas as pd
 
-from .utils.igraph_implementation import network_features
+#from .utils.igraph_implementation import network_features
 
 class IBMDataset(DGLDataset):
     def __init__(self, dataset_name= "HI-Small"):
@@ -164,8 +164,7 @@ class IBMDataset(DGLDataset):
         # Vectorized check for "Is Laundering" being 1
         is_laundering = transactions_df_extended["Is Laundering"] == 1
 
-        # Vectorized sum of specified columns
-        pattern_sum = transactions_df_extended[pattern_columns].sum(axis=1)
+        pattern_sum = transactions_df_extended[pattern_columns].max(axis=1) # To get a unique label for the patterns per node
 
         # Use numpy.where for a vectorized conditional operation
         transactions_df_extended["Not Classified"] = np.where((is_laundering) & (pattern_sum == 0), 1, 0)
@@ -211,6 +210,24 @@ class IBMDataset(DGLDataset):
         node_data['Bank'], _ = pd.factorize(node_data['Bank'])
 
         return node_data
+    
+    def _masks(self, label_data, seed = 1997):
+        mask_data = label_data.copy()
+        mask_data['train_mask'] = False
+        mask_data['val_mask'] = False
+        mask_data['test_mask'] = False
+
+        for step in mask_data["class"].unique():
+            class_mask_data = mask_data[mask_data["class"] == step]
+
+            train_index, test_index = train_test_split(class_mask_data.index, test_size=0.4, random_state=seed)
+            val_index, test_index = train_test_split(test_index, test_size=0.5, random_state=seed)
+
+            mask_data.loc[train_index, 'train_mask'] = True
+            mask_data.loc[val_index, 'val_mask'] = True
+            mask_data.loc[test_index, 'test_mask'] = True
+
+        return mask_data['train_mask'], mask_data['val_mask'], mask_data['test_mask']
 
     def process(self):
         transactions_df, pattern_columns = self.define_ML_labels()
@@ -231,13 +248,14 @@ class IBMDataset(DGLDataset):
         edge_dst = torch.from_numpy(edge_data["txId2"].to_numpy())
         edge_scr, edge_dst = torch.cat([edge_scr, edge_dst]), torch.cat([edge_dst, edge_scr]) # Make it bidirectional
 
-        list_network_features = network_features(len(node_data), edge_scr)
-        node_data["degree"] = list_network_features[0]
-        node_data["betweenness"] = list_network_features[1]
-        node_data["closeness"] = list_network_features[2]
-        node_data["pagerank"] = list_network_features[3]
+        network_features = pd.read_csv("data/IBM/"+self.dataset_name+"_network.csv")
+        node_data["degree"] = network_features["degree"]
+        #node_data["betweenness"] = network_features["betweenness"]
+        #node_data["closeness"] = network_features["closeness"]
+        node_data["pagerank"] = network_features["pagerank"]
 
         node_features = torch.from_numpy(node_data.drop(columns=["txId"]).to_numpy())
+        node_features = node_features.float()
         node_labels = torch.from_numpy(label_data["class"].to_numpy())
 
         self.graph = dgl.graph(
@@ -246,7 +264,13 @@ class IBMDataset(DGLDataset):
             )
         
         self.graph.ndata["label"] = node_labels
-        self.graph.ndata["feat"] = node_features
+        #self.graph.ndata["feat"] = node_features
+        self.graph.ndata["feat"] =  torch.ones((node_data.shape[0], 1)).float()
+
+        masks = self._masks(label_data)
+        self.graph.ndata["train_mask"] = torch.from_numpy(masks[0].to_numpy())
+        self.graph.ndata["val_mask"] = torch.from_numpy(masks[1].to_numpy())
+        self.graph.ndata["test_mask"] = torch.from_numpy(masks[2].to_numpy())
 
 
     def __getitem__(self, i):
@@ -254,9 +278,3 @@ class IBMDataset(DGLDataset):
     
     def __len__(self):
         return 1
-
-
-
-
-        
-
