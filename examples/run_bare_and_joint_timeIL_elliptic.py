@@ -11,7 +11,7 @@ from begin.algorithms.bare.nodes import *
 from begin.scenarios.nodes import NCScenarioLoader
 from begin.utils import GCNNode
 
-scenario = NCScenarioLoader(dataset_name='bitcoin', num_tasks=7, metric='prauc', save_path='data', incr_type='time', task_shuffle=1)
+scenario = NCScenarioLoader(dataset_name='elliptic', num_tasks=7, metric='prauc', save_path='data', incr_type='time', task_shuffle=1)
 model = GCNNode(scenario.num_feats, scenario.num_classes, 256, dropout=0.0)
 benchmark = NCTimeILBareTrainer(model = model,
                                 scenario = scenario,
