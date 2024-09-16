@@ -52,7 +52,7 @@ class NCTrainer(BaseTrainer):
         curr_batch, mask = _curr_batch
         preds = model(curr_batch.to(self.device), 
                       curr_batch.ndata['feat'].to(self.device)
-                      )[mask][:,1]
+                      )[mask][:,]
         labs = curr_batch.ndata['label'][mask].to(self.device)
         loss = self.loss_fn(preds, labs)
         return {'preds': preds, 'loss': loss}
