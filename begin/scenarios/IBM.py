@@ -227,11 +227,13 @@ class IBMDataset_het(DGLDataset):
         return g
     
     def create_labels(self, data, targets):
-        labels = np.array(len(data.shape[0]))
+        labels = np.zeros(data.shape[0])
         for i in range(len(targets)):
-            labels += data[targets[i]]*(i+1) 
+            target_numeric = data[targets[i]]*(i+1)
+            target_int = np.array(target_numeric.values, dtype=int)
+            labels += target_int
 
-        return labels.tolist()
+        return labels
 
     def process(self):
         # Load data
@@ -279,10 +281,17 @@ class IBMDataset_het(DGLDataset):
             'STACK'
             ]
         
+        # Change the data to one-hot encoding
+        data = data[columns_X + ['Is Laundering'] + targets]
+        data = pd.get_dummies(data)
+
+        columns_X = list(data.columns.drop(targets)) # Update the columns_X to the new one-hot encoded columns
+
         self.graph.nodes['transaction'].data['feat'] = torch.from_numpy(data[columns_X].to_numpy()).float()
 
         if self.separate_labels:
-            self.graph.nodes['transaction'].data['label'] = torch.from_numpy(self.create_labels(data, targets)).float()
+            labels = self.create_labels(data, targets)
+            self.graph.nodes['transaction'].data['label'] = torch.from_numpy(labels).float()
             self.num_classes = len(targets)+1 # Add one for the 0 label
         else:
             self.graph.nodes['transaction'].data['label'] = torch.from_numpy(data['Is Laundering'].to_numpy()).float()
