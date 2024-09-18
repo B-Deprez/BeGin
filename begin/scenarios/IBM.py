@@ -2,6 +2,8 @@ import os
 from sklearn.model_selection import train_test_split
 import numpy as np
 
+from data.IBM.label import create_identifiers, format_number, create_AML_labels, delete_specific_nodes
+
 os.environ["DGLBACKEND"] = "pytorch"  # tell DGL what backend to use
 import dgl
 import torch
@@ -11,111 +13,11 @@ import pandas as pd
 
 #from .utils.igraph_implementation import network_features
 
-class IBMDataset(DGLDataset):
+class IBMDataset_hom(DGLDataset):
     def __init__(self, dataset_name= "HI-Small"):
         self.dataset_name = dataset_name
         super().__init__(name="IBM")
         self.num_classes = 8
-
-    def create_identifiers(self, df):
-        """
-        Create a list of identifiers for each row in the dataframe.
-        """
-        # Convert all columns to string type
-        df_str = df.astype(str)
-
-        # Then use agg to join all column values into a single string for each row
-        identifyer_list = df_str.agg(','.join, axis=1).tolist()
-
-        return identifyer_list
-
-    def format_number(self, number):
-        formatted = str(number)
-        if not('.' in formatted and len(formatted.split('.')[1]) >= 2):
-            formatted = format(number, '.2f')
-        return formatted 
-
-    def create_AML_labels(self, path_patterns):
-        transaction_list = []
-        fanout_list = []
-        fanin_list = []
-        gather_scatter_list = []
-        scatter_gather_list = []
-        cycle_list = []
-        random_list = []
-        bipartite_list = []
-        stack_list = []
-
-        with open(path_patterns, "r") as f:
-            attemptActive = False
-            column = ""
-
-            # Initialize all lists with zeros for simplification
-            list_defaults = [0] * 8  # Assuming there are 8 lists as per the code snippet
-
-            # Mapping of column names to their corresponding list index
-            column_to_list_index = {
-                "FAN-OUT": 0,
-                "FAN-IN": 1,
-                "GATHER-SCATTER": 2,
-                "SCATTER-GATHER": 3,
-                "CYCLE": 4,
-                "RANDOM": 5,
-                "BIPARTITE": 6,
-                "STACK": 7
-            }
-            while True:
-                line = f.readline()
-                # Check if not at the end of the file
-                if not line:
-                    break
-
-                # Add pattern to the corresponding transaction
-                if line.startswith("BEGIN"): # Start of a pattern
-                    attemptActive = True
-                    column = line.split(" - ")[1].split(":")[0].strip()
-                elif line.startswith("END"): # End of a pattern => reset all parameters + no update of columns
-                    attemptActive = False
-                    column = ""
-                elif attemptActive:
-                    identifyer = line.strip()
-                    transaction_list.append(identifyer)
-                    
-                    # Reset all lists to default values
-                    current_values = list_defaults.copy()
-                    
-                    if column in column_to_list_index:
-                        # Update the relevant list based on the column name
-                        current_values[column_to_list_index[column]] = 1
-                        
-                        # Unpack the updated values to each list
-                        fanout_list.append(current_values[0])
-                        fanin_list.append(current_values[1])
-                        gather_scatter_list.append(current_values[2])
-                        scatter_gather_list.append(current_values[3])
-                        cycle_list.append(current_values[4])
-                        random_list.append(current_values[5])
-                        bipartite_list.append(current_values[6])
-                        stack_list.append(current_values[7])
-
-                    else:
-                        raise ValueError("Unknown pattern type")
-                    
-        df_patterns = pd.DataFrame(
-            {
-                "Identifyer": transaction_list,
-                "FAN-OUT": fanout_list,
-                "FAN-IN": fanin_list,
-                "GATHER-SCATTER": gather_scatter_list,
-                "SCATTER-GATHER": scatter_gather_list,
-                "CYCLE": cycle_list,
-                "RANDOM": random_list,
-                "BIPARTITE": bipartite_list,
-                "STACK": stack_list
-            }
-        )
-
-        return df_patterns
 
     def define_ML_labels(self):
         path_trans="data/IBM/"+self.dataset_name+"_Trans.csv" 
@@ -146,16 +48,16 @@ class IBMDataset(DGLDataset):
 
         columns_money = ['Amount Received', 'Amount Paid']
         for col in columns_money: # make sure monetary amounts have two decimals
-            transactions_df[col] = transactions_df[col].apply(lambda x: self.format_number(x))
+            transactions_df[col] = transactions_df[col].apply(lambda x: format_number(x))
 
         transactions_df['Is Laundering'] = transactions_df['Is Laundering'].astype(int)
         
-        identifyer_list = self.create_identifiers(transactions_df)
+        identifyer_list = create_identifiers(transactions_df)
         transactions_df["Identifyer"] = identifyer_list
         del identifyer_list
 
         pattern_columns = ["FAN-OUT", "FAN-IN", "GATHER-SCATTER", "SCATTER-GATHER", "CYCLE", "RANDOM", "BIPARTITE", "STACK"]
-        df_patterns = self.create_AML_labels(path_patterns)
+        df_patterns = create_AML_labels(path_patterns)
 
         # Merge the two dataframes
         transactions_df_extended = transactions_df.merge(df_patterns, on="Identifyer", how="left")
@@ -272,6 +174,119 @@ class IBMDataset(DGLDataset):
         self.graph.ndata["val_mask"] = torch.from_numpy(masks[1].to_numpy())
         self.graph.ndata["test_mask"] = torch.from_numpy(masks[2].to_numpy())
 
+
+    def __getitem__(self, i):
+        return self.graph
+    
+    def __len__(self):
+        return 1
+    
+class IBMDataset_het(DGLDataset):
+    def __init__(self, dataset_name= "HI-Small", separate_labels=False):
+        self.dataset_name = dataset_name
+        self.separate_labels = separate_labels
+        super().__init__(name="IBM")
+
+    def create_node_data(self, transactions_df):
+        from_data = transactions_df[["Account", "From Bank"]].drop_duplicates()
+        from_data.columns = ["txId", "Bank"]
+        to_data = transactions_df[["Account.1", "To Bank"]].drop_duplicates()
+        to_data.columns = ["txId", "Bank"]
+        node_data = pd.concat([from_data, to_data], axis=0).drop_duplicates()
+
+        # Convert bank names to integers
+        node_data['Bank'], _ = pd.factorize(node_data['Bank'])
+
+        return node_data
+    
+    def create_nodes(self, data):
+        client_source = [] # Client who makes the transaction
+        trans_target = [] # Transaction made by the client
+        trans_source = [] # Transaction received by the client
+        client_target = [] # Client who receives the transaction
+
+        for i in range(len(data)):
+            client_source.append(data.loc[i, "Account"])
+            trans_target.append(i)
+            trans_source.append(i)
+            client_target.append(data.loc[i, "Account.1"])
+        
+        return client_source, trans_target, trans_source, client_target
+
+    def create_graph(self, data):
+        client_source, trans_target, trans_source, client_target = self.create_nodes(data)
+
+        # Create the hererogeneous graph
+        g = dgl.heterograph({
+            ('client', 'sends', 'transaction'): (client_source, trans_target),
+            ('transaction', 'received_by', 'client'): (trans_source, client_target), 
+            ('client', 'receives', 'transaction'): (client_target, trans_source),
+            ('transaction', 'sent_by', 'client'): (trans_target, client_source)
+        })
+
+        return g
+    
+    def create_labels(self, data, targets):
+        labels = np.array(len(data.shape[0]))
+        for i in range(len(targets)):
+            labels += data[targets[i]]*(i+1) 
+
+        return labels.tolist()
+
+    def process(self):
+        # Load data
+        data = pd.read_csv('data/IBM/'+self.dataset_name+'_Trans_Patterns.csv')
+
+        # Pre-processing
+        # Convert the Timestamp column to datetime
+        data['Timestamp'] = pd.to_datetime(data['Timestamp'])
+
+        # Extract day of the week, hour, and minute
+        data['DayOfWeek'] = data['Timestamp'].dt.dayofweek
+        data['Hour'] = data['Timestamp'].dt.hour
+        data['Minute'] = data['Timestamp'].dt.minute
+
+        node_data = self.create_node_data(data) # Create node data
+
+        map_id = {j:i for i,j in enumerate(node_data["txId"])}
+        data["Account"] = data["Account"].map(map_id)
+        data["Account.1"] = data["Account.1"].map(map_id)
+        node_data["txId"] = node_data["txId"].map(map_id)
+
+        self.graph = self.create_graph(data)
+        self.graph.nodes['client'].data['feat'] = torch.from_numpy(node_data.drop(columns=["txId"]).to_numpy()).float()
+        
+        columns_X = [
+            'DayOfWeek', 
+            'Hour', 
+            'Minute', 
+            'From Bank', 
+            'To Bank', 
+            'Amount Paid', 
+            'Payment Currency', 
+            'Receiving Currency',
+            'Payment Format'
+            ]
+        targets = [
+            #'Is Laundering',
+            'FAN-OUT', 
+            'FAN-IN', 
+            'GATHER-SCATTER', 
+            'SCATTER-GATHER', 
+            'CYCLE',
+            'RANDOM', 
+            'BIPARTITE', 
+            'STACK'
+            ]
+        
+        self.graph.nodes['transaction'].data['feat'] = torch.from_numpy(data[columns_X].to_numpy()).float()
+
+        if self.separate_labels:
+            self.graph.nodes['transaction'].data['label'] = torch.from_numpy(self.create_labels(data, targets)).float()
+            self.num_classes = len(targets)+1 # Add one for the 0 label
+        else:
+            self.graph.nodes['transaction'].data['label'] = torch.from_numpy(data['Is Laundering'].to_numpy()).float()
+            self.num_classes = 2
 
     def __getitem__(self, i):
         return self.graph
