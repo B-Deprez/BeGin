@@ -25,6 +25,24 @@ def train_test_split_custom(X, y, timebased=False, test_size=0.2, random_state=N
 
     return X_train, X_test, y_train, y_test
 
+def f1_score(precision_list, recall_list):
+    f1_score_list = []
+    for i in range(len(precision_list)):
+        if precision_list[i] + recall_list[i] == 0:
+            f1_score = 0
+        else:
+            f1_score = 2 * precision_list[i] * recall_list[i] / (precision_list[i] + recall_list[i])
+        f1_score_list.append(f1_score)
+    return np.array(f1_score_list)
+
+def max_f1_score(precision_list, recall_list):
+    f1_score_list = f1_score(precision_list, recall_list)
+    max_f1_score = f1_score_list.max()
+    max_f1_score_index = f1_score_list.argmax()
+    precision_max_f1_score = precision_list[max_f1_score_index]
+    recall_max_f1_score = recall_list[max_f1_score_index]
+    return max_f1_score, precision_max_f1_score, recall_max_f1_score
+
 # Load data
 data = pd.read_csv('data/IBM/HI-Small_Trans_Patterns.csv')
 
@@ -78,7 +96,7 @@ for target in targets:
     X_train, X_test, y_train, y_test = train_test_split_custom(X, y, timebased=True, test_size=0.2)
 
     # Train a logistic regression model
-    lr = LogisticRegression()
+    lr = LogisticRegression(max_iter=1000)
     lr.fit(X_train, y_train)
     y_pred_lr = lr.predict_proba(X_test)[:, 1]
 
@@ -105,8 +123,11 @@ for target in targets:
     print(f'Average Precision: {average_precision_score(y_test, y_pred_xgb)}')
 
     precision_lr, recall_lr, _ = precision_recall_curve(y_test, y_pred_lr)
+    max_f1_score_lr, precision_max_f1_score_lr, recall_max_f1_score_lr = max_f1_score(precision_lr, recall_lr)
     precision_rf, recall_rf, _ = precision_recall_curve(y_test, y_pred_rf)
+    max_f1_score_rf, precision_max_f1_score_rf, recall_max_f1_score_rf = max_f1_score(precision_rf, recall_rf)
     precision_xgb, recall_xgb, _ = precision_recall_curve(y_test, y_pred_xgb)
+    max_f1_score_xgb, precision_max_f1_score_xgb, recall_max_f1_score_xgb = max_f1_score(precision_xgb, recall_xgb)
 
     fpr_lr, tpr_lr, _ = roc_curve(y_test, y_pred_lr, pos_label=1)
     fpr_rf, tpr_rf, _ = roc_curve(y_test, y_pred_rf, pos_label=1)
@@ -115,6 +136,12 @@ for target in targets:
     ax_pr[targets.index(target) // 3, targets.index(target) % 3].plot(recall_lr, precision_lr, label='Logistic Regression: AUC-PR = {:.3f}'.format(average_precision_score(y_test, y_pred_lr)))
     ax_pr[targets.index(target) // 3, targets.index(target) % 3].plot(recall_rf, precision_rf, label='Random Forest: AUC-PR = {:.3f}'.format(average_precision_score(y_test, y_pred_rf)))
     ax_pr[targets.index(target) // 3, targets.index(target) % 3].plot(recall_xgb, precision_xgb, label='XGBoost: AUC-PR = {:.3f}'.format(average_precision_score(y_test, y_pred_xgb)))
+    ax_pr[targets.index(target) // 3, targets.index(target) % 3].plot(recall_max_f1_score_lr, precision_max_f1_score_lr, color='blue')
+    ax_pr[targets.index(target) // 3, targets.index(target) % 3].annotate('Max F1 Score: {:.3f}'.format(max_f1_score_lr), (recall_max_f1_score_lr, precision_max_f1_score_lr), textcoords='offset points', xytext=(0, 10), ha='center', fontsize=8, color='blue')
+    ax_pr[targets.index(target) // 3, targets.index(target) % 3].plot(recall_max_f1_score_rf, precision_max_f1_score_rf, color='orange')
+    ax_pr[targets.index(target) // 3, targets.index(target) % 3].annotate('Max F1 Score: {:.3f}'.format(max_f1_score_rf), (recall_max_f1_score_rf, precision_max_f1_score_rf), textcoords='offset points', xytext=(0, 10), ha='center', fontsize=8, color='orange')
+    ax_pr[targets.index(target) // 3, targets.index(target) % 3].plot(recall_max_f1_score_xgb, precision_max_f1_score_xgb, color='green')
+    ax_pr[targets.index(target) // 3, targets.index(target) % 3].annotate('Max F1 Score: {:.3f}'.format(max_f1_score_xgb), (recall_max_f1_score_xgb, precision_max_f1_score_xgb), textcoords='offset points', xytext=(0, 10), ha='center', fontsize=8, color='green')
     ax_pr[targets.index(target) // 3, targets.index(target) % 3].plot([0, 1], [y_test.mean(), y_test.mean()], linestyle='--', label='Chance level: AUC-PR = %0.3f' % y_test.mean(), color='black', alpha=0.5)
     ax_pr[targets.index(target) // 3, targets.index(target) % 3].set_title(target)
     ax_pr[targets.index(target) // 3, targets.index(target) % 3].set_xlabel('Recall')
