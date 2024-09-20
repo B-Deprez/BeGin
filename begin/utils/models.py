@@ -194,7 +194,7 @@ class GCNLink(nn.Module):
             
     def forward(self, graph, feat, srcs, dsts, task_masks=None):
         _h = self.gcn(graph, feat, task_masks)
-        x = _h[srcs] * _h[dsts]
+        x = _h[srcs] * _h[dsts] # You cannot include the edge features
         x = self.dropout(x)
         for i in range(self.n_layers - 1):
             x = self.linears[i](x)
