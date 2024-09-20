@@ -12,7 +12,7 @@ from .datasets import *
 from . import evaluator_map
 
 from .elliptic import EllipticDataset
-from .IBM import IBMDataset
+from .IBM import IBMDataset_hom
 
 def load_node_dataset(dataset_name, dataset_load_func, incr_type, save_path):
     """
@@ -29,7 +29,7 @@ def load_node_dataset(dataset_name, dataset_load_func, incr_type, save_path):
         graph = dataset[0]
         num_feats, num_classes = graph.ndata['feat'].shape[-1], 2
     elif dataset_name in ['IBM', 'ibm'] and incr_type in ['task', 'class']: # Code for IBM dataset. We assume this is always task-IL.
-        dataset = IBMDataset()
+        dataset = IBMDataset_hom()
         graph = dataset[0]
         num_feats, num_classes = graph.ndata['feat'].shape[-1], dataset.num_classes
     elif dataset_name in ['cora'] and incr_type in ['task', 'class']:

@@ -16,7 +16,7 @@ import pandas as pd
 class IBMDataset_hom(DGLDataset):
     def __init__(self, dataset_name= "HI-Small"):
         self.dataset_name = dataset_name
-        super().__init__(name="IBM")
+        super().__init__(name="IBM_hom")
         self.num_classes = 8
 
     def define_ML_labels(self):
@@ -181,11 +181,11 @@ class IBMDataset_hom(DGLDataset):
     def __len__(self):
         return 1
     
-class IBMDataset_het(DGLDataset):
+class IBMDataset_heteronode(DGLDataset):
     def __init__(self, dataset_name= "HI-Small", separate_labels=False):
         self.dataset_name = dataset_name
         self.separate_labels = separate_labels
-        super().__init__(name="IBM")
+        super().__init__(name="IBM_het")
 
     def create_node_data(self, transactions_df):
         from_data = transactions_df[["Account", "From Bank"]].drop_duplicates()
@@ -235,6 +235,22 @@ class IBMDataset_het(DGLDataset):
 
         return labels
 
+    def create_mask(self, data, train_size=0.6, val_size=0.2):
+        # The masks are create to have a temporal split
+        # Assumption that the data is sorted by timestamp in ascending order
+        train_mask = np.zeros(data.shape[0])
+        val_mask = np.zeros(data.shape[0])
+        test_mask = np.zeros(data.shape[0])
+
+        train_num = int(data.shape[0]*train_size)
+        val_num = int(data.shape[0]*val_size)
+
+        train_mask[:train_num] = 1
+        val_mask[train_num:train_num+val_num] = 1
+        test_mask[train_num+val_num:] = 1
+
+        return train_mask, val_mask, test_mask
+
     def process(self):
         # Load data
         data = pd.read_csv('data/IBM/'+self.dataset_name+'_Trans_Patterns.csv')
@@ -242,6 +258,9 @@ class IBMDataset_het(DGLDataset):
         # Pre-processing
         # Convert the Timestamp column to datetime
         data['Timestamp'] = pd.to_datetime(data['Timestamp'])
+        # Sort the data by timestamp, makes it easier to do temporal splits
+        data = data.sort_values(by='Timestamp', ascending=True)
+        data.reset_index(drop=True, inplace=True)
 
         # Extract day of the week, hour, and minute
         data['DayOfWeek'] = data['Timestamp'].dt.dayofweek
@@ -295,6 +314,134 @@ class IBMDataset_het(DGLDataset):
             self.num_classes = len(targets)+1 # Add one for the 0 label
         else:
             self.graph.nodes['transaction'].data['label'] = torch.from_numpy(data['Is Laundering'].to_numpy()).float()
+            self.num_classes = 2
+
+        masks = self.create_mask(data)
+
+        self.graph.nodes['transaction'].data['train_mask'] = torch.from_numpy(masks[0]).bool()
+        self.graph.nodes['transaction'].data['val_mask'] = torch.from_numpy(masks[1]).bool()
+        self.graph.nodes['transaction'].data['test_mask'] = torch.from_numpy(masks[2]).bool()
+
+    def __getitem__(self, i):
+        return self.graph
+    
+    def __len__(self):
+        return 1
+    
+class IBMDataset_link(DGLDataset):
+    def __init__(self, dataset_name= "HI-Small", directed=True, separate_labels=False):
+        self.dataset_name = dataset_name
+        self.directed = directed
+        self.separate_labels = separate_labels
+
+        self.columns_X = ['DayOfWeek', 
+            'Hour', 
+            'Minute', 
+            'From Bank', 
+            'To Bank', 
+            'Amount Paid', 
+            'Payment Currency', 
+            'Receiving Currency',
+            'Payment Format'
+            ]
+
+        self.targets = [
+            #'Is Laundering',
+            'FAN-OUT', 
+            'FAN-IN', 
+            'GATHER-SCATTER', 
+            'SCATTER-GATHER', 
+            'CYCLE',
+            'RANDOM', 
+            'BIPARTITE', 
+            'STACK'
+            ]
+
+        super().__init__(name="IBM_link")
+
+    def process_data(self):
+        # Load data
+        data = pd.read_csv('data/IBM/'+self.dataset_name+'_Trans_Patterns.csv')
+
+        # Pre-processing
+        # Convert the Timestamp column to datetime
+        data['Timestamp'] = pd.to_datetime(data['Timestamp'])
+        # Sort the data by timestamp, makes it easier to do temporal splits
+        data = data.sort_values(by='Timestamp', ascending=True)
+        data.reset_index(drop=True, inplace=True)
+
+        # Extract day of the week, hour, and minute
+        data['DayOfWeek'] = data['Timestamp'].dt.dayofweek
+        data['Hour'] = data['Timestamp'].dt.hour
+        data['Minute'] = data['Timestamp'].dt.minute
+
+        return data
+
+    def create_node_data(self, transactions_df):
+        from_data = transactions_df[["Account", "From Bank"]].drop_duplicates()
+        from_data.columns = ["txId", "Bank"]
+        to_data = transactions_df[["Account.1", "To Bank"]].drop_duplicates()
+        to_data.columns = ["txId", "Bank"]
+        node_data = pd.concat([from_data, to_data], axis=0).drop_duplicates()
+
+        # Convert bank names to integers
+        node_data['Bank'], _ = pd.factorize(node_data['Bank'])
+
+        return node_data
+    
+    def create_labels(self, data, targets):
+        labels = np.zeros(data.shape[0])
+        for i in range(len(targets)):
+            target_numeric = data[targets[i]]*(i+1)
+            target_int = np.array(target_numeric.values, dtype=int)
+            labels += target_int
+
+        if not self.directed:
+            labels = np.concatenate((labels, labels))
+
+        return labels
+    
+    def process(self):
+        data = self.process_data()
+        node_data = self.create_node_data(data) # Create node data
+
+        map_id = {j:i for i,j in enumerate(node_data["txId"])}
+        node_data["txId"] = node_data["txId"].map(map_id)
+
+        edge_data = data[["Account", "Account.1", "Payment Format" , "Amount Paid"]]
+        edge_data.columns = ["txId1", "txId2", "Payment Format", "Amount Paid"]
+        edge_data.txId1 = edge_data.txId1.map(map_id)
+        edge_data.txId2 = edge_data.txId2.map(map_id)
+
+        edge_features = torch.from_numpy(edge_data[["Amount Paid"]].to_numpy()).float()
+
+        edge_scr = torch.from_numpy(edge_data["txId1"].to_numpy())
+        edge_dst = torch.from_numpy(edge_data["txId2"].to_numpy())
+
+        if not self.directed:
+            edge_features = torch.cat([edge_features, edge_features])
+            edge_scr, edge_dst = torch.cat([edge_scr, edge_dst]), torch.cat([edge_dst, edge_scr]) # Make it bidirectional
+
+        self.graph = dgl.graph(
+            (edge_scr, edge_dst), 
+            num_nodes=node_data.shape[0]
+        )
+
+        # Change the data to one-hot encoding
+        data = data[self.columns_X + ['Is Laundering'] + self.targets]
+        data = pd.get_dummies(data)
+
+        self.columns_X = list(data.columns.drop(self.targets)) # Update the columns_X to the new one-hot encoded columns
+
+        self.graph.ndata["feat"] = torch.from_numpy(node_data.drop(columns=["txId"]).to_numpy()).float()
+        self.graph.edata['feat'] = edge_features.float()
+
+        if self.separate_labels:
+            labels = self.create_labels(data, self.targets)
+            self.graph.edata['label'] = torch.from_numpy(labels).float()
+            self.num_classes = len(self.targets)+1 # Add one for the 0 label
+        else:
+            self.graph.edata['label'] = torch.from_numpy(data['Is Laundering'].to_numpy()).float()
             self.num_classes = 2
 
     def __getitem__(self, i):
