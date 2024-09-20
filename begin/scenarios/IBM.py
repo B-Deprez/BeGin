@@ -401,6 +401,26 @@ class IBMDataset_link(DGLDataset):
 
         return labels
     
+    def create_masks(self, data, train_size=0.6, val_size=0.2):
+        num_observations = data.shape[0]
+        train_num = int(num_observations*train_size)
+        val_num = int(num_observations*val_size)
+
+        train_mask = np.zeros(num_observations)
+        val_mask = np.zeros(num_observations)
+        test_mask = np.zeros(num_observations)
+
+        train_mask[:train_num] = 1
+        val_mask[train_num:train_num+val_num] = 1
+        test_mask[train_num+val_num:] = 1
+
+        if not self.directed:
+            train_mask = np.concatenate((train_mask, train_mask))
+            val_mask = np.concatenate((val_mask, val_mask))
+            test_mask = np.concatenate((test_mask, test_mask)) 
+
+        return train_mask, val_mask, test_mask
+    
     def process(self):
         data = self.process_data()
         node_data = self.create_node_data(data) # Create node data
@@ -436,12 +456,18 @@ class IBMDataset_link(DGLDataset):
         self.graph.ndata["feat"] = torch.from_numpy(node_data.drop(columns=["txId"]).to_numpy()).float()
         self.graph.edata['feat'] = edge_features.float()
 
+        train_mask, val_mask, test_mask = self.create_masks(data)
+        self.graph.edata['train_mask'] = torch.from_numpy(train_mask).bool()
+        self.graph.edata['val_mask'] = torch.from_numpy(val_mask).bool()
+        self.graph.edata['test_mask'] = torch.from_numpy(test_mask).bool()
+
         if self.separate_labels:
             labels = self.create_labels(data, self.targets)
             self.graph.edata['label'] = torch.from_numpy(labels).float()
             self.num_classes = len(self.targets)+1 # Add one for the 0 label
         else:
-            self.graph.edata['label'] = torch.from_numpy(data['Is Laundering'].to_numpy()).float()
+            labels = self.create_labels(data, ['Is Laundering'])
+            self.graph.edata['label'] = torch.from_numpy(labels).float()
             self.num_classes = 2
 
     def __getitem__(self, i):

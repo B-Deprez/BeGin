@@ -8,6 +8,7 @@ from ogb.linkproppred import DglLinkPropPredDataset
 
 from .common import BaseScenarioLoader
 from .datasets import *
+from IBM import IBMDataset_link
 from . import evaluator_map
 
 def load_linkp_dataset(dataset_name, dataset_load_func, incr_type, save_path):
@@ -346,7 +347,10 @@ def load_linkc_dataset(dataset_name, dataset_load_func, incr_type, save_path):
         graph.edata['test_mask'] = ((metadata['inner_tvt_split'] % 10) > 8)
 
     if dataset_name == 'ibm' and incr_type in ['task']:
-        pass
+        dataset = IBMDataset_link(separate_labels=True)
+        graph = dataset[0]
+        num_feats = graph.ndata['feat'].shape[-1]
+        num_classes = graph.num_classes
 
     else:
         raise NotImplementedError("Tried to load unsupported scenario.")
