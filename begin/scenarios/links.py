@@ -344,7 +344,10 @@ def load_linkc_dataset(dataset_name, dataset_load_func, incr_type, save_path):
         graph.edata['train_mask'] = ((metadata['inner_tvt_split'] % 10) < 8)
         graph.edata['val_mask'] = ((metadata['inner_tvt_split'] % 10) == 8)
         graph.edata['test_mask'] = ((metadata['inner_tvt_split'] % 10) > 8)
-        
+
+    if dataset_name == 'ibm' and incr_type in ['task']:
+        pass
+
     else:
         raise NotImplementedError("Tried to load unsupported scenario.")
     
