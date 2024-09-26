@@ -2,7 +2,7 @@ import torch
 from torch import nn
 from torch_scatter import scatter
 import numpy as np
-from sklearn.metrics import roc_auc_score, average_precision_score
+from sklearn.metrics import roc_auc_score, average_precision_score, f1_score
 import time
 
 class BaseEvaluator:
@@ -136,3 +136,20 @@ class HitsEvaluator(BaseEvaluator):
         num_hits = ((answer == 1) & (prediction > neg_threshold)).float().sum()
         
         return (num_hits / num_pos).item()
+    
+class MicroF1Evaluator(BaseEvaluator):
+    r"""
+        The evaluator for computing Micro F1 score.
+
+        Bases: ``BaseEvaluator``
+    """
+    def __call__(self, _prediction, _answer, indices):
+        prediction = _prediction.squeeze().to(_answer.device)
+        answer = _answer.squeeze()
+        scope = self._task_ids[indices] < self.num_tasks
+        f1_per_task = scatter((prediction == answer).float(), self._task_ids[indices], dim=-1, reduce='mean', dim_size = self.num_tasks + 1)
+        f1_per_task[self.num_tasks] = self.simple_eval(prediction[scope], answer[scope])
+        return f1_per_task
+
+    def simple_eval(self, prediction, answer):
+        return f1_score(answer.cpu().numpy(), prediction.cpu().numpy(), average='micro')
