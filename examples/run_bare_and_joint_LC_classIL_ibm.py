@@ -14,10 +14,10 @@ from begin.utils import GCNLink
 
 scenario = LCScenarioLoader(
     dataset_name="ibm", 
-    num_tasks=4,
-    metric="accuracy",
-    incr_type="task", 
-    task_shuffle=True, 
+    num_tasks=9,
+    metric="f1micro",
+    incr_type="class", 
+    task_shuffle=False, 
     save_path="data"
 )
 
@@ -28,7 +28,7 @@ model = GCNLink(
     dropout=0.5
 )
 
-benchmark = LCTaskILBareTrainer(
+benchmark = LCClassILBareTrainer(
     model = model,
     scenario = scenario,
     optimizer_fn=lambda x: torch.optim.Adam(x, lr=1e-3, weight_decay=0),
@@ -40,4 +40,4 @@ benchmark = LCTaskILBareTrainer(
     full_mode=True
 )
 
-results = benchmark.run(epoch_per_task = 10)
+results = benchmark.run(epoch_per_task = 11)
