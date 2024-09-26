@@ -340,13 +340,13 @@ def load_linkc_dataset(dataset_name, dataset_load_func, incr_type, save_path):
             graph.edata['label'] = label_to_class[graph.edata.pop('label').squeeze(-1) + 10]
             
         pkl_path = os.path.join(save_path, f'bitcoin_metadata_allIL.pkl')
-        download(f'https://github.com/anonymous-submission-23/anonymous-submission-23.github.io/raw/main/_splits/bitcoin_metadata_allIL.pkl', pkl_path)
+        #download(f'https://github.com/anonymous-submission-23/anonymous-submission-23.github.io/raw/main/_splits/bitcoin_metadata_allIL.pkl', pkl_path)
         metadata = pickle.load(open(pkl_path, 'rb'))
         graph.edata['train_mask'] = ((metadata['inner_tvt_split'] % 10) < 8)
         graph.edata['val_mask'] = ((metadata['inner_tvt_split'] % 10) == 8)
         graph.edata['test_mask'] = ((metadata['inner_tvt_split'] % 10) > 8)
 
-    if dataset_name == 'ibm' and incr_type in ['task']:
+    elif dataset_name in ['IBM', 'ibm'] and incr_type in ['task', 'class']:
         dataset = IBMDataset_link(separate_labels=True)
         graph = dataset[0]
         num_feats = graph.ndata['feat'].shape[-1] # Only have node features for link classification

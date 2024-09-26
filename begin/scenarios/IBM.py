@@ -463,11 +463,11 @@ class IBMDataset_link(DGLDataset):
 
         if self.separate_labels:
             labels = self.create_labels(data, self.targets)
-            self.graph.edata['label'] = torch.from_numpy(labels).int()
+            self.graph.edata['label'] = torch.from_numpy(labels).long()
             self.num_classes = len(self.targets)+1 # Add one for the 0 label
         else:
             labels = self.create_labels(data, ['Is Laundering'])
-            self.graph.edata['label'] = torch.from_numpy(labels).int()
+            self.graph.edata['label'] = torch.from_numpy(labels).long()
             self.num_classes = 2
 
     def __getitem__(self, i):
