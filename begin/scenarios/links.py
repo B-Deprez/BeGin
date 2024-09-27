@@ -402,6 +402,13 @@ class LCScenarioLoader(BaseScenarioLoader):
                 self.__splits = torch.split(torch.randperm(self.num_classes), self.num_classes // self.num_tasks)[:self.num_tasks]
             else:
                 self.__splits = torch.split(torch.arange(self.num_classes), self.num_classes // self.num_tasks)[:self.num_tasks]
+                if self.dataset_name in ['IBM', 'ibm']: # combine class 0 and 1
+                    split_tensor = self.__splits
+                    element_0 = split_tensor[0].item()
+                    element_1 = split_tensor[1].item()
+                    self.__splits = tuple([torch.tensor([element_0, element_1])])+split_tensor[2:]
+
+                    self.num_tasks = self.num_tasks-1 #Combine two elements, 
             
             print('class split information:', self.__splits)
             # compute task ids for each instance and remove time information (since it is unnecessary)
