@@ -146,8 +146,11 @@ class MicroF1Evaluator(BaseEvaluator):
     def __call__(self, _prediction, _answer, indices):
         prediction = _prediction.squeeze().to(_answer.device)
         answer = _answer.squeeze()
+        f1_per_task = torch.zeros(self.num_tasks + 1)
         scope = self._task_ids[indices] < self.num_tasks
-        f1_per_task = scatter((prediction == answer).float(), self._task_ids[indices], dim=-1, reduce='mean', dim_size = self.num_tasks + 1)
+        for i in range(self.num_tasks):
+            is_target = (self._task_ids[indices] == i)
+            if is_target.any(): f1_per_task[i] = self.simple_eval(prediction[is_target], answer[is_target])
         f1_per_task[self.num_tasks] = self.simple_eval(prediction[scope], answer[scope])
         return f1_per_task
 
